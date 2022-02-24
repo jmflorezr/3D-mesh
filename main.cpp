@@ -65,7 +65,7 @@ int main(int, char* [])
     string str_obj = "../DataSources/density_bigxy_";
     string str_numero_archivo = "0000";
 
-    for (int i = 20; i <= 23; i++)
+    for (int i = 20; i <= 30; i++)
     {
         string cargar = str_numero_archivo + to_string(i);
         int fin = cargar.length();
