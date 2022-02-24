@@ -1,16 +1,11 @@
-#include <vtkActor.h>
-#include <vtkCamera.h>
-#include <vtkInteractorStyleTrackballCamera.h>
-#include <vtkNamedColors.h>
-#include <vtkNew.h>
-#include <vtkPointPicker.h>
-#include <vtkPolyDataMapper.h>
-#include <vtkProperty.h>
-#include <vtkRenderWindow.h>
-#include <vtkRenderWindowInteractor.h>
-#include <vtkRenderer.h>
-#include <vtkSphereSource.h>
 #include <vtkSmartPointer.h>
+#include <vtkActor.h>
+#include <vtkRenderer.h>
+#include <vtkRenderWindow.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkRenderWindowInteractor.h>
+#include <vtkNamedColors.h>
+#include <vtkProperty.h>
 #include <vtkPNGReader.h>
 #include <vtkImageDataGeometryFilter.h>
 #include <vtkWarpScalar.h>
@@ -19,59 +14,58 @@
 #include <vtkPolyDataReader.h>
 #include <vtkVertexGlyphFilter.h>
 #include <vtkPointData.h>
+#include <vtkCallbackCommand.h>
 #include "iostream"
+#include <stdio.h>
+#include <stdlib.h>
 
 #define vtkSPtr vtkSmartPointer
 #define vtkSPtrNew(Var, Type) vtkSPtr<Type> Var = vtkSPtr<Type>::New();
 
+vtkSPtrNew(renderer, vtkRenderer);
+vtkSPtrNew(renderWindow, vtkRenderWindow); //Objeto para renderizar (dibujar)
+
 using namespace std;
+int visible = 0;
 
 namespace {
+    void ClickCallbackFunction(vtkObject* caller, long unsigned int eventId, void* clientData, void* callData) {
+        vtkSPtrNew(actores, vtkActorCollection);
+        vtkRenderWindowInteractor* iren =
+            static_cast<vtkRenderWindowInteractor*>(caller);
 
-    // Define interaction style
-    class customMouseInteractorStyle : public vtkInteractorStyleTrackballCamera
-    {
-    public:
-        static customMouseInteractorStyle* New();
-        vtkTypeMacro(customMouseInteractorStyle, vtkInteractorStyleTrackballCamera);
-
-        virtual void OnLeftButtonDown() override
-        {
-            std::cout << "Presionó el botón izquierdo." << std::endl;
-            // Forward events
-            vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+        actores = renderer->GetActors();
+        actores->InitTraversal();
+        string key = iren->GetKeySym();
+        cout << "*******************************************************" << endl;
+        for (vtkIdType a = 0; a < actores->GetNumberOfItems(); ++a) {
+            vtkActor* actor = actores->GetNextActor();
+            cout << "Actor " << a << "/" << actores->GetNumberOfItems() << " Visible " << actor->GetVisibility() << endl;
+            if (key == "Up" && visible < 10 && a == visible) {
+                actor->SetVisibility(false);
+                vtkActor* actor = actores->GetNextActor();
+                actor->SetVisibility(true);
+                a = actores->GetNumberOfItems();
+                visible++;
+            }
         }
-
-        virtual void OnMiddleButtonDown() override
-        {
-            std::cout << "Presionó el botón del medio." << std::endl;
-            // Forward events
-            vtkInteractorStyleTrackballCamera::OnMiddleButtonDown();
-        }
-
-        virtual void OnRightButtonDown() override
-        {
-            std::cout << "Presionó el botón derecho." << std::endl;
-            vtkInteractorStyleTrackballCamera::OnRightButtonDown();
-        }
+        cout << "*******************************************************" << endl;
+        renderer->ResetCamera();
+        renderWindow->Render();
     };
 
-    vtkStandardNewMacro(customMouseInteractorStyle);
-
-} // namespace
-
+}
 int main(int, char* [])
 {
     vtkSPtrNew(reader, vtkPolyDataReader); //Objeto para leer darchivos
     vtkSPtrNew(glyphFilter, vtkVertexGlyphFilter) //Objeto para aplicar filtros
-        vtkSPtrNew(mapper, vtkPolyDataMapper); //Objeto para mapear
-    vtkSPtrNew(renderWindow, vtkRenderWindow); //Objeto para renderizar (dibujar)
+    vtkSPtrNew(mapper, vtkPolyDataMapper); //Objeto para mapear
 
     char* char_arr;
     string str_obj = "../DataSources/density_bigxy_";
     string str_numero_archivo = "0000";
 
-    for (int i = 20; i < 31; i++)
+    for (int i = 20; i <= 23; i++)
     {
         string cargar = str_numero_archivo + to_string(i);
         int fin = cargar.length();
@@ -81,47 +75,48 @@ int main(int, char* [])
 
         char_arr = &cargar[0];
         reader->SetFileName(char_arr);
+
+        reader->Update();
+        glyphFilter->SetInputData(reader->GetOutput());
+        glyphFilter->Update();
+
+        vtkSPtrNew(lut, vtkLookupTable);
+        vtkIdType endID = glyphFilter->GetOutput()->GetNumberOfPoints();
+        for (vtkIdType i = 0; i < 10; i++)
+        {
+            double red, green, blue, alpha, val;
+            val = glyphFilter->GetOutput()->GetPointData()->GetArray("PointOpacity")->GetTuple1(i);
+            std::cout << val << endl;
+            lut->SetTableValue(i, 1, 0, 0, val);
+        }
+
+        //Mapea archivo
+        mapper->SetInputConnection(glyphFilter->GetOutputPort());
+        mapper->Update();
+
+        //Objeto a graficar
+        vtkSPtrNew(actor, vtkActor);
+        actor->SetMapper(mapper);
+        actor->GetProperty()->SetOpacity(0.0025);
+        actor->GetProperty()->SetPointSize(2);
+        actor->SetVisibility(false);
+
+        renderer->AddActor(actor);
     }
 
-    reader->Update();
-
-    glyphFilter->SetInputData(reader->GetOutput());    
-    glyphFilter->Update();
-
-    vtkSPtrNew(lut, vtkLookupTable);
-    vtkIdType endID = glyphFilter->GetOutput()->GetNumberOfPoints();
-    for (vtkIdType i = 0; i < 10; i++)
-    {
-        double red, green, blue, alpha, val;
-        val = glyphFilter->GetOutput()->GetPointData()->GetArray("PointOpacity")->GetTuple1(i);
-        std::cout << val << endl;
-        lut->SetTableValue(i, 1, 0, 0, val);
-    }    
-
-    //Mapea archivo        
-    mapper->SetInputConnection(glyphFilter->GetOutputPort());
-    mapper->Update();
-
-    //Objeto a graficar
-    vtkSPtrNew(actor, vtkActor);
-    actor->SetMapper(mapper);
-    actor->GetProperty()->SetOpacity(0.0025);
-    actor->GetProperty()->SetPointSize(2);
-
-    vtkSPtrNew(renderer, vtkRenderer);
-    renderer->AddActor(actor);
     renderer->SetBackground(0, 0, 0);
 
-    //Dibuja en pantalla        
+    //Dibuja en pantalla
     renderWindow->AddRenderer(renderer);
     renderWindow->SetWindowName("MouseEvents");
 
     vtkSPtrNew(renderWindowInteractor, vtkRenderWindowInteractor);
     renderWindowInteractor->SetRenderWindow(renderWindow);
-    renderer->ResetCamera();
 
-    vtkNew<customMouseInteractorStyle> style;
-    renderWindowInteractor->SetInteractorStyle(style);
+    vtkSPtrNew(clickCallback, vtkCallbackCommand);
+    clickCallback->SetCallback(ClickCallbackFunction);
+
+    renderWindowInteractor->AddObserver(vtkCommand::KeyPressEvent, clickCallback);
 
     renderWindow->Render();
     renderWindowInteractor->Initialize();
